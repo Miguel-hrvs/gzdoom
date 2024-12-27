@@ -15,12 +15,6 @@ jobs:
           deps_cmdline: brew install libvpx
           build_type: Release
 
-        - name: macOS
-          os: macos-14
-          extra_options: -G Xcode -DDYN_OPENAL=OFF
-          deps_cmdline: brew install libvpx
-          build_type: Debug
-
         - name: Linux GCC 12
           os: ubuntu-22.04
           extra_options: -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12
