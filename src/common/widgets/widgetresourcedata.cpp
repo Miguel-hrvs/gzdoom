@@ -1,14 +1,22 @@
 
 #include <zwidget/core/resourcedata.h>
 #include <zwidget/core/theme.h>
+#include "c_cvars.h"
 #include "filesystem.h"
 #include "printf.h"
 #include "zstring.h"
+#include "i_system.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif
+
+CUSTOM_CVARD(Int, ui_theme, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG, "launcher theme. 0: auto, 1: dark, 2: light")
+{
+	if (self < 0) self = 0;
+	if (self > 2) self = 2;
+}
 
 FResourceFile* WidgetResources;
 
@@ -23,7 +31,42 @@ void InitWidgetResources(const char* filename)
 	if (!WidgetResources)
 		I_FatalError("Unable to open %s", filename);
 
-	WidgetTheme::SetTheme(std::make_unique<DarkWidgetTheme>());
+	bool use_dark = ui_theme == 1 || (ui_theme == 0 && I_IsDarkMode());
+
+	if (use_dark)
+	{
+		WidgetTheme::SetTheme(std::unique_ptr<WidgetTheme>(new WidgetTheme{{
+			Colorf::fromRgb(0x2A2A2A), // background
+			Colorf::fromRgb(0xE2DFDB), //
+			Colorf::fromRgb(0x212121), // headers / inputs
+			Colorf::fromRgb(0xE2DFDB), //
+			Colorf::fromRgb(0x444444), // interactive elements
+			Colorf::fromRgb(0xFFFFFF), //
+			Colorf::fromRgb(0x555555), // hover / highlight
+			Colorf::fromRgb(0xFFFFFF), //
+			Colorf::fromRgb(0xBBBBBB), // click
+			Colorf::fromRgb(0x000000), //
+			Colorf::fromRgb(0x646464), // around elements
+			Colorf::fromRgb(0x555555)  // between elements
+		}}));
+	}
+	else
+	{
+		WidgetTheme::SetTheme(std::unique_ptr<WidgetTheme>(new WidgetTheme{{
+			Colorf::fromRgb(0xeee8d5), // background
+			Colorf::fromRgb(0x000000), // text
+			Colorf::fromRgb(0xfdf6e3), // headers / inputs
+			Colorf::fromRgb(0x000000), // headers / inputs text
+			Colorf::fromRgb(0xd7d2bf), // interactive elements
+			Colorf::fromRgb(0x000000), // interactive elements text
+			Colorf::fromRgb(0xa4c2e9), // hover / highlight
+			Colorf::fromRgb(0x000000), // hover / highlight text
+			Colorf::fromRgb(0x7ca2e9), // click
+			Colorf::fromRgb(0x000000), // click text
+			Colorf::fromRgb(0x586e75), // around elements
+			Colorf::fromRgb(0xbdb8a7)  // between elements
+		}}));
+	}
 }
 
 void CloseWidgetResources()

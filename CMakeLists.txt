@@ -242,7 +242,11 @@ if( ${TARGET_ARCHITECTURE} MATCHES "x86_64" )
 endif()
 
 option (HAVE_VULKAN "Enable Vulkan support" ON)
-option (HAVE_GLES2 "Enable GLES2 support" ON)
+if( APPLE )
+	option (HAVE_GLES2 "Enable GLES2 support" OFF)
+else()
+	option (HAVE_GLES2 "Enable GLES2 support" ON)
+endif()
 
 # no, we're not using external asmjit for now, we made too many modifications to our's.
 # if the asmjit author uses our changes then we'll update this.
@@ -320,6 +324,8 @@ else()
 	set( DEB_C_FLAGS "" )
 
 	if( APPLE )
+		list(PREPEND CMAKE_PREFIX_PATH "/opt/local")    # port
+		list(PREPEND CMAKE_PREFIX_PATH "/opt/homebrew") # brew
 		set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13")
 		if( CMAKE_CXX_COMPILER_ID STREQUAL "GNU" )
 			# If we're compiling with a custom GCC on the Mac (which we know since g++-4.2 doesn't support C++11) statically link libgcc.
@@ -359,7 +365,9 @@ if (HAVE_VULKAN)
 	add_subdirectory( libraries/ZVulkan )
 endif()
 
+set(ZWIDGET_BUILD_EXAMPLE OFF CACHE INTERNAL "" FORCE)
 add_subdirectory( libraries/ZWidget )
+
 add_subdirectory( libraries/webp )
 
 add_subdirectory( libraries/discordrpc EXCLUDE_FROM_ALL )

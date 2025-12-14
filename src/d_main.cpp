@@ -119,6 +119,7 @@
 #include "vm.h"
 #include "wi_stuff.h"
 #include "wipe.h"
+#include "m_haptics.h"
 #include "zwidget/window/window.h"
 
 #ifdef __unix__
@@ -812,13 +813,13 @@ void CalcFps()
 	static uint64_t LastMS = 0, LastSec = 0, FrameCount = 0, LastTic = 0;
 
 	uint64_t ms = screen->FrameTime;
-	uint64_t howlong = ms - LastMS;
+	uint64_t howlong = (ms - LastMS) / i_timescale;
 	if ((signed)howlong > 0) // do this only once per frame.
 	{
 		uint32_t thisSec = (uint32_t)(ms / 1000);
 		if (LastSec < thisSec)
 		{
-			LastFPS = FrameCount / (thisSec - LastSec);
+			LastFPS = FrameCount / (thisSec - LastSec) * i_timescale;
 			LastSec = thisSec;
 			FrameCount = 0;
 		}
@@ -917,7 +918,7 @@ void D_Display ()
 	if (nodrawers || screen == NULL)
 		return; 				// for comparative timing / profiling
 	
-	if (!AppActive && (screen->IsFullscreen() || !vid_activeinbackground))
+	if (!AppActive && !setmodeneeded && (screen->IsFullscreen() || !vid_activeinbackground))
 	{
 		return;
 	}
@@ -1333,7 +1334,7 @@ void D_PageDrawer (void)
 	if (Subtitle != nullptr)
 	{
 		FFont* font = generic_ui ? NewSmallFont : SmallFont;
-		DrawFullscreenSubtitle(font, GStrings.CheckString(Subtitle));
+		DrawFullscreenSubtitle(font, Subtitle);
 	}
 	if (Advisory.isValid())
 	{
@@ -3337,7 +3338,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 	}
 
 	TexMan.Init();
-	
+
 	if (!(batchrun || norun)) Printf ("V_Init: allocate screen.\n");
 	if (!(restart || norun))
 	{
@@ -3353,6 +3354,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 	FBaseCVar::EnableCallbacks ();
 
 	StartScreen = nostartscreen? nullptr : GetGameStartScreen(per_shader_progress > 0 ? max_progress * 10 / 9 : max_progress + 3);
+	setmodeneeded = true;
 	if (StartScreen != nullptr) StartScreen->Render();
 	
 	// +compatmode cannot be used on the command line, so use this as a substitute
@@ -3403,6 +3405,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 	}, CheckForHacks, InitBuildTiles);
 	PatchTextures();
 	TexAnim.Init();
+	G_AddBoomHelpScreens();
 	C_InitConback(TexMan.CheckForTexture(gameinfo.BorderFlat.GetChars(), ETextureType::Flat), true, 0.25);
 
 	FixWideStatusBar();
@@ -3458,8 +3461,9 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 	// [RH] Add any .deh and .bex files on the command line.
 	// If there are none, try adding any in the config file.
 	// Note that the command line overrides defaults from the config.
-
-	if ((ConsiderPatches("-deh") | ConsiderPatches("-bex")) == 0 &&
+	bool foundDeh = ConsiderPatches("-deh");
+	bool foundBex = ConsiderPatches("-bex");
+	if (!foundDeh && !foundBex &&
 		gameinfo.gametype == GAME_Doom && GameConfig->SetSection ("Doom.DefaultDehacked"))
 	{
 		const char *key;
@@ -3543,7 +3547,6 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 		{
 			return 0;
 		}
-		setmodeneeded = true;
 	}
 
 	// [SP] Force vanilla transparency auto-detection to re-detect our game lumps now
@@ -3740,7 +3743,8 @@ static int D_DoomMain_Internal (void)
 		OkForLocalization,
 		[]() ->FConfigFile* { return GameConfig; },
 		nullptr, 
-		RemapUserTranslation
+		RemapUserTranslation,
+		[](const char* s) {Joy_Rumble(s); }
 	};
 
 	std::set_new_handler(NewFailure);
@@ -3843,6 +3847,42 @@ static int D_DoomMain_Internal (void)
 		}
 		lastIWAD = iwad;
 
+		if (GameStartupInfo.DiscordAppId.GetChars())
+		{
+			const char* check = GameStartupInfo.DiscordAppId.GetChars();
+			uint32_t index = 0;
+			bool failedcheck = false;
+			while (!failedcheck && check[index])
+			{
+				if (check[index] < '0' || check[index] > '9')
+				{
+					Printf(TEXTCOLOR_RED "DiscordAppId must be a numerical value!\n");
+					failedcheck = true;
+				}
+				index++;
+			}
+			if (failedcheck)
+				GameStartupInfo.DiscordAppId = '\0';
+		}
+
+		if (GameStartupInfo.SteamAppId.GetChars())
+		{
+			const char* check = GameStartupInfo.SteamAppId.GetChars();
+			uint32_t index = 0;
+			bool failedcheck = false;
+			while (!failedcheck && check[index])
+			{
+				if (check[index] < '0' || check[index] > '9')
+				{
+					Printf(TEXTCOLOR_RED "SteamAppId must be a numerical value!\n");
+					failedcheck = true;
+				}
+				index++;
+			}
+			if (failedcheck)
+				GameStartupInfo.SteamAppId = '\0';
+		}
+
 		int ret = D_InitGame(iwad_info, allwads, pwads);
 		pwads.clear();
 		pwads.shrink_to_fit();
@@ -3904,7 +3944,10 @@ int GameMain()
 	if (!zwidget)
 		zwidget = DisplayBackend::TryCreateSDL2();
 	if (!zwidget)
+    {
+		fprintf(stderr, "Unable to create init zwidget\n");
 		return -1;
+    }
 	DisplayBackend::Set(std::move(zwidget));
 
 	int ret = 0;

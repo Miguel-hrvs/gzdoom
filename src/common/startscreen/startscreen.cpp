@@ -458,7 +458,7 @@ int FStartScreen::DrawChar(FBitmap& screen, double x, double y, unsigned charnum
 		dest[5] = color_array[(srcbyte >> 2) & 1];
 		dest[6] = color_array[(srcbyte >> 1) & 1];
 		dest[7] = color_array[(srcbyte) & 1];
-		if (size == 16)
+		if (size == 2)
 		{
 			srcbyte = *src++;
 
@@ -667,6 +667,13 @@ void FStartScreen::Render(bool force)
 	// Do not refresh too often. This function gets called a lot more frequently than the screen can update.
 	if (nowtime - screen->FrameTime > minwaittime || force)
 	{
+		if (setmodeneeded)
+		{
+			setmodeneeded = false;
+			screen->ToggleFullscreen(vid_fullscreen);
+			V_OutputResized(screen->GetWidth(), screen->GetHeight());
+		}
+		
 		screen->FrameTime = nowtime;
 		screen->BeginFrame();
 		twod->ClearClipRect();

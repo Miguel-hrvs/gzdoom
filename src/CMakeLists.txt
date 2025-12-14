@@ -134,6 +134,7 @@ else()
 	if( NOT APPLE OR NOT OSX_COCOA_BACKEND )
 		find_package( SDL2 REQUIRED )
 		include_directories( SYSTEM "${SDL2_INCLUDE_DIR}" )
+		link_directories(${SDL2_LINK_DIR})
 		set( PROJECT_LIBRARIES ${PROJECT_LIBRARIES} "${SDL2_LIBRARY}" )
 	endif()
 
@@ -310,6 +311,8 @@ if( UNIX )
 endif()
 
 # Flags
+
+option(BUILD_FLATPAK "Enable Flatpak-specific build options" OFF)
 
 # Update gitinfo.h
 
@@ -803,6 +806,7 @@ set (PCH_SOURCES
 	hu_scores.cpp
 	m_cheat.cpp
 	m_misc.cpp
+	m_haptics.cpp
 	playsim/p_acs.cpp
 	playsim/p_actionfunctions.cpp
 	p_conversation.cpp
@@ -1095,7 +1099,6 @@ set (PCH_SOURCES
 	common/engine/renderstyle.cpp
 	common/engine/v_colortables.cpp
 	common/engine/serializer.cpp
-	common/engine/m_haptics.cpp
 	common/engine/m_joy.cpp
 	common/engine/m_random.cpp
 	common/objects/autosegs.cpp
@@ -1274,6 +1277,9 @@ set_source_files_properties( common/engine/sc_man.cpp PROPERTIES OBJECT_DEPENDS 
 set_source_files_properties( ${NOT_COMPILED_SOURCE_FILES} PROPERTIES HEADER_FILE_ONLY TRUE )
 set_source_files_properties( ${GAME_NONPCH_SOURCES} common/textures/hires/hqresize.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS TRUE )
 
+if(BUILD_FLATPAK)
+	target_compile_definitions(zdoom PRIVATE IS_FLATPAK=1)
+endif()
 
 if(${CMAKE_SYSTEM_NAME} STREQUAL "SunOS")
 	# [BL] Solaris requires these to be explicitly linked.
@@ -1377,6 +1383,10 @@ else()
 	)
 endif()
 
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  set_target_properties(zdoom PROPERTIES LINK_FLAGS "-z nostart-stop-gc")
+endif()
+
 if( MSVC )
 	option ( CONSOLE_MODE "Compile as a console application" OFF )
 	if ( CONSOLE_MODE )
@@ -1423,11 +1433,18 @@ add_custom_command(TARGET zdoom POST_BUILD
 	${CMAKE_SOURCE_DIR}/fm_banks/gs-by-papiezak-and-sneakernets.wopn $<TARGET_FILE_DIR:zdoom>/fm_banks/gs-by-papiezak-and-sneakernets.wopn
 )
 
-if ( NOT APPLE AND NOT ZMUSIC_SYSTEM_INSTALL)
+if ( NOT ZMUSIC_SYSTEM_INSTALL AND (NOT DEFINED BUILD_SHARED_LIBS OR BUILD_SHARED_LIBS))
 	# bring zmusic in
 	add_custom_command(TARGET zdoom POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:zmusic> $<TARGET_FILE_DIR:zdoom>
 		DEPENDS zmusic )
+	if ( NOT WIN32 )
+		add_custom_command(TARGET zdoom POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE_NAME:zmusic> $<TARGET_SONAME_FILE_NAME:zmusic>
+			COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_SONAME_FILE_NAME:zmusic> $<TARGET_LINKER_FILE_NAME:zmusic>
+			WORKING_DIRECTORY $<TARGET_FILE_DIR:zdoom>
+			DEPENDS zmusic )
+	endif()
 endif()
 
 
@@ -1489,6 +1506,17 @@ if( APPLE )
 	# Dymanic libraries like libvulkan.dylib or libMoltenVK.dylib will be loaded by dlopen()
 	# if placed in the directory with the main executable
 	set( CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rpath @executable_path" )
+endif()
+
+if ( NOT ZMUSIC_SYSTEM_INSTALL )
+	if ( WIN32 OR APPLE )
+		# nothing to do
+	else()
+		install(TARGETS zmusic
+			LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+			COMPONENT "Game executable"
+		)
+	endif()
 endif()
 
 if( WIN32 )
